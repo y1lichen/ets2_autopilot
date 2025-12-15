@@ -11,6 +11,7 @@ import cv2
 import mss
 import numpy as np
 
+
 # Platform-specific imports
 if platform == "win32":
     from win32gui import (
@@ -28,6 +29,7 @@ elif platform == "darwin":
         raise
 
 from ets2_imgproc import infer_polyline, CROP_X, CROP_Y, WIN_HEIGHT, WIN_WIDTH
+from telemetry.shared_memory_truck_telemetry import SharedMemoryTruckTelemetry
 from ets2_telemetry import TelemetryReader
 from ets2_telemetry.all_values import AllValues
 import ets2_autopilot.calc_input as calc_input
@@ -114,10 +116,6 @@ def is_window_focused_macos(app):
 
 
 def main():
-    print("Hello, world!")
-    # DPI Scaling workaround from
-    # https://stackoverflow.com/questions/44398075/can-dpi-scaling-be-enabled-disabled-programmatically-on-a-per-session-basis
-    # This works for Win10/8 but not 7/Vista
     if platform == "win32":
         try:
             errorCode = ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -132,6 +130,17 @@ def main():
     with mss.mss() as sct:
         last_time = time.perf_counter_ns()
         while True:
+            if telemetry is None:
+                try:
+                    telemetry = SharedMemoryTruckTelemetry()
+                except FileNotFoundError:
+                    print("\rConnect to the game failed, the plugin file not found, waiting for the game to run.", end="")
+                    time.sleep(1)
+                    continue
+                except Exception as e:
+                    print(f"\rUnable to init shared memory{e}")
+                    time.sleep(1)
+                    continue
             # grab window position
             # assuming you're using Win10 + ETS2 in 1920x1080 window
             if window_handle is None or (platform == "win32" and window_handle == 0):
@@ -171,7 +180,19 @@ def main():
             im_src = np.array(sct.grab(ets2_window))
             # magic happens here
             centreline, _ = infer_polyline(im_src)
-            telemetry.update_telemetry(all_values)
+            
+            try:
+                telemetry.update()
+                if telemetry.is_paused:
+                    continue
+            except FileNotFoundError:
+                print("\rETS2 end or shared memory disconnected", end="")
+                telemetry = None  # 重置，重新初始化
+                time.sleep(1)
+            except Exception as e:
+                print(f"\rUnexpected error：{e}")
+                time.sleep(1)
+
             if len(centreline) > 0:
                 dt = time.perf_counter_ns() - last_time
                 steering = calc_input.CalcInput.pure_pursuit_control_car(
