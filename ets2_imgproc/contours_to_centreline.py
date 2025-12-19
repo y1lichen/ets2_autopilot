@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import triangle as tr
 
 from .constants import TRUCK_CENTRE
 
@@ -42,13 +43,9 @@ def contours_to_centreline(contours, heirarchy):
     if start_contour is None or contour_thickness(start_contour) < 12:
         return centreline, diagonals
 
-    # convert contour into a format suitable for triangulation
+    # convert contour into a format suitable for Triangle package
     contour_tr = contourcv2_to_tr(start_contour_idx, contours, heirarchy)
-    triangulation = triangulate_contour_opencv(
-        contour_tr["vertices"], 
-        contour_tr["segments"], 
-        contour_tr["holes"]
-    )
+    triangulation = tr.triangulate(contour_tr, "pne")
     # centreline via greedy walk through triangles
     triangle_idx = get_containing_triangle(TRUCK_CENTRE, triangulation)
     prev_tri_idx = triangle_idx  # for iteration
@@ -258,96 +255,6 @@ def setdiff2d_bc(arr1, arr2):
     From https://stackoverflow.com/a/66674679"""
     idx = (arr1[:, None] != arr2).any(-1).all(1)
     return arr1[idx]
-
-
-def triangulate_contour_opencv(vertices, segments, holes):
-    """Triangulate a contour using OpenCV Delaunay triangulation.
-    
-    Converts the input format (compatible with Triangle library) to OpenCV's
-    Subdiv2D format and returns a triangulation dictionary with the same structure.
-    """
-    # Convert vertices to float32 for OpenCV
-    vertices_float = vertices.astype(np.float32)
-    
-    # Get bounding box and create Subdiv2D
-    min_x = np.min(vertices_float[:, 0]) - 1000
-    min_y = np.min(vertices_float[:, 1]) - 1000
-    max_x = np.max(vertices_float[:, 0]) + 1000
-    max_y = np.max(vertices_float[:, 1]) + 1000
-    
-    subdiv = cv2.Subdiv2D((int(min_x), int(min_y), int(max_x - min_x), int(max_y - min_y)))
-    
-    # Insert vertices
-    for pt in vertices_float:
-        subdiv.insert((float(pt[0]), float(pt[1])))
-    
-    # Get triangles
-    triangles = subdiv.getTriangleList()
-    
-    # Map triangles back to vertex indices
-    triangle_indices = []
-    for tri_coords in triangles:
-        tri_points = np.array([tri_coords[i*2:i*2+2] for i in range(3)], dtype=np.float32)
-        indices = []
-        for pt in tri_points:
-            # Find closest vertex in original vertices
-            distances = np.sum((vertices_float - pt) ** 2, axis=1)
-            idx = np.argmin(distances)
-            if distances[idx] < 1e-3:  # tolerance for matching
-                indices.append(idx)
-        
-        if len(indices) == 3:
-            triangle_indices.append(indices)
-    
-    triangle_indices = np.array(triangle_indices)
-    
-    # Build neighbors array by finding adjacent triangles
-    num_triangles = len(triangle_indices)
-    neighbors = np.full((num_triangles, 3), -1, dtype=int)
-    
-    for i in range(num_triangles):
-        tri_i = set(triangle_indices[i])
-        for j in range(i + 1, num_triangles):
-            tri_j = set(triangle_indices[j])
-            # Two triangles are neighbors if they share an edge (2 vertices)
-            if len(tri_i & tri_j) == 2:
-                # Find which edges are shared
-                shared = list(tri_i & tri_j)
-                # Find position in first triangle
-                for edge_idx in range(3):
-                    edge_vertices = {triangle_indices[i][(edge_idx + 1) % 3], 
-                                   triangle_indices[i][(edge_idx + 2) % 3]}
-                    if edge_vertices == set(shared):
-                        neighbors[i, edge_idx] = j
-                        break
-                # Find position in second triangle
-                for edge_idx in range(3):
-                    edge_vertices = {triangle_indices[j][(edge_idx + 1) % 3], 
-                                   triangle_indices[j][(edge_idx + 2) % 3]}
-                    if edge_vertices == set(shared):
-                        neighbors[j, edge_idx] = i
-                        break
-    
-    # Build edges and segments arrays
-    edges = []
-    for i in range(num_triangles):
-        for j in range(3):
-            pt1 = triangle_indices[i, j]
-            pt2 = triangle_indices[i, (j + 1) % 3]
-            edge = tuple(sorted([pt1, pt2]))
-            if edge not in edges:
-                edges.append(edge)
-    
-    edges = np.array(edges)
-    
-    # Return in Triangle-compatible format
-    return {
-        "vertices": vertices,
-        "triangles": triangle_indices,
-        "neighbors": neighbors,
-        "edges": edges,
-        "segments": segments,
-    }
 
 
 def contour_thickness(contour):

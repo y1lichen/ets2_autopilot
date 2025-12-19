@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from ets2_telemetry.all_values import AllValues
+from telemetry.truck_telemetry import TruckTelemetry
 
 
 class CalcInput:
@@ -81,7 +81,7 @@ class CalcInput:
         # Implementation for calculating desired speed goes here
         return 0
 
-    def calc_input(self, telemetry, centreline, dt):
+    def calc_input(self, telemetry: TruckTelemetry, centreline, dt):
         # Filter the coordinates
         filtered_centreline = self.filter_coordinates(centreline)
 
@@ -123,8 +123,8 @@ class CalcInput:
         # Update previous values
         self.prev_steering_error = steering_error
         self.prev_throttle_error = throttle_error
-        self.prev_timestamp_steering = telemetry["general_info"]["timestamp"]
-        self.prev_timestamp_throttle = telemetry["general_info"]["timestamp"]
+        self.prev_timestamp_steering = telemetry.timestamp()
+        self.prev_timestamp_throttle = telemetry.timestamp()
         """
         print(
             f"P: {round(self.Kp_steering * steering_error, 3):.3f}, I: {round(self.Ki_steering * self.steering_integral, 5):.5f}, D: {round(self.Kd_steering * steering_derivative, 3):.3f}"
@@ -132,9 +132,10 @@ class CalcInput:
         """
         return steering, throttle
 
-    def pure_pursuit_control_car(telemetry: AllValues, waypoints, look_ahead_distance):
+    def pure_pursuit_control_car(telemetry: TruckTelemetry, waypoints, look_ahead_distance):
         # note: telemetry Z values are -forwards, +backwards
-        wheel_pos_z = telemetry.truck_values.wheelPositionZ
+        wheel_pos_z = telemetry.truck_wheel_positions
+        print(wheel_pos_z)
         # wheels are in pairs- [0..1] is front axle, [2..3] is rear axle
         # this is the displacement of the rear axle from origin. It can be negative.
         rear_axle_displacement = wheel_pos_z[2]
