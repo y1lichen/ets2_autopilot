@@ -56,7 +56,7 @@ def main():
             im_src = np.array(sct_img)
 
             # 影像處理：找出中心線
-            centreline, _, centreline_image = infer_polyline(im_src)
+            centreline, imout, centreline_image = infer_polyline(im_src)
 
             # 遙測更新
             try:
@@ -81,43 +81,41 @@ def main():
             # 繪製所有路徑點 (藍色圓點)
             for point in centreline_image:
                 px, py = int(point[0]), int(point[1])
-                if 0 <= px < TOP_DOWN_SIZE[0] and 0 <= py < TOP_DOWN_SIZE[1]:
-                    cv2.circle(im_topdown, (px, py), 3, (255, 0, 0), -1)  # 藍色實心圓
+                cv2.circle(im_topdown, (px, py), 3, (255, 0, 0), -1)  # 藍色實心圓
 
             # 控制邏輯
-            if len(centreline) > 0:
-                # 計算轉向指令並發送
-                steering, look_ahead_point = calc_input.CalcInput.pure_pursuit_control_car(
-                    telemetry, centreline, 20
-                )
-                send_input(telemetry, steering, 0)
+
+            # 計算轉向指令並發送
+            steering, look_ahead_point = calc_input.CalcInput.pure_pursuit_control_car(
+                telemetry, centreline, 10
+            )
+            send_input(telemetry, steering, 0)
+            
+            # 在畫面上即時印出轉向值
+            cv2.putText(im_topdown, f"Steer: {steering:.4f}", (50, 100), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+            
+            # 標記目標點（要轉向前往的方向）
+            if look_ahead_point is not None:
+                target_x, target_y = look_ahead_point
+                # 從後軸坐標轉換到車輛中心坐標
+                wheel_pos_z = telemetry.truck_wheel_position_z
+                rear_axle_displacement = wheel_pos_z[2]
+                center_target_x = target_x
+                center_target_y = target_y - rear_axle_displacement  # 減去偏移，因為waypoints被加了偏移
                 
-                # 在畫面上即時印出轉向值
-                cv2.putText(im_topdown, f"Steer: {steering:.4f}", (50, 100), 
-                            cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
+                # 從車輛坐標轉換到圖像坐標（逆轉infer_polyline的轉換）
+                # infer_polyline做了: centreline = np.multiply(centreline, (-0.25, -0.25)) 然後 np.subtract(centreline, TRUCK_CENTRE)
+                # 所以逆轉換是: 先乘以(-4, -4)，然後加上TRUCK_CENTRE
+                img_target_x = int(center_target_x * (-4) + TRUCK_CENTRE[0])
+                img_target_y = int(center_target_y * (-4) + TRUCK_CENTRE[1])
                 
-                # 標記目標點（要轉向前往的方向）
-                if look_ahead_point is not None:
-                    target_x, target_y = look_ahead_point
-                    # 從後軸坐標轉換到車輛中心坐標
-                    wheel_pos_z = telemetry.truck_wheel_positions
-                    rear_axle_displacement = wheel_pos_z[2]
-                    center_target_x = target_x
-                    center_target_y = target_y - rear_axle_displacement  # 減去偏移，因為waypoints被加了偏移
-                    
-                    # 從車輛坐標轉換到圖像坐標（逆轉infer_polyline的轉換）
-                    # infer_polyline做了: centreline = np.multiply(centreline, (-0.25, -0.25)) 然後 np.subtract(centreline, TRUCK_CENTRE)
-                    # 所以逆轉換是: 先乘以(-4, -4)，然後加上TRUCK_CENTRE
-                    img_target_x = int(center_target_x * (-4) + TRUCK_CENTRE[0])
-                    img_target_y = int(center_target_y * (-4) + TRUCK_CENTRE[1])
-                    
-                    # 確保坐標在圖像範圍內
-                    if 0 <= img_target_x < TOP_DOWN_SIZE[0] and 0 <= img_target_y < TOP_DOWN_SIZE[1]:
-                        cv2.drawMarker(im_topdown, (img_target_x, img_target_y), (0, 0, 255), cv2.MARKER_STAR, 30, 3)
-                        cv2.putText(im_topdown, "Target", (img_target_x + 20, img_target_y), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-            else:
-                controller.set_steering(0.0)
+                # 確保坐標在圖像範圍內
+                if 0 <= img_target_x < TOP_DOWN_SIZE[0] and 0 <= img_target_y < TOP_DOWN_SIZE[1]:
+                    cv2.drawMarker(im_topdown, (img_target_x, img_target_y), (0, 0, 255), cv2.MARKER_STAR, 30, 3)
+                    cv2.putText(im_topdown, "Target", (img_target_x + 20, img_target_y), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+   
 
             # 4. 寫入影片檔案
             video_out.write(im_topdown)
