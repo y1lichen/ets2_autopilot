@@ -42,6 +42,6 @@ PTS_SRC = np.array(
     ]
 )
 PTS_DST = np.array([[1006, 863], [1006, 981], [911, 981], [911, 863]])
-TRUCK_CENTRE = (958.5, 922)  # centre of truck in top-down view
+TRUCK_CENTRE = (958.5, 820)  # centre of truck in top-down view
 # getPerspectiveTransform would also work here
 HOMOGRAPHY, status = cv2.findHomography(PTS_SRC, PTS_DST)
