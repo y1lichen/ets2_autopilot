@@ -13,8 +13,8 @@ WHITE = (255, 255, 255)
 WHITE_1CH = 255
 
 # hardcoded GPS thresholding colours, remember its BGRA not RGBA
-GREEN_MIN = (6, 229, 17, 255)
-GREEN_MAX = (28, 251, 97, 255)
+GREEN_MIN = (0, 210, 0, 255)
+GREEN_MAX = (70, 255, 100, 255)
 RED_MIN = (11, 11, 194, 255)
 RED_MAX = (42, 42, 207, 255)
 
@@ -42,6 +42,6 @@ PTS_SRC = np.array(
     ]
 )
 PTS_DST = np.array([[1006, 863], [1006, 981], [911, 981], [911, 863]])
-TRUCK_CENTRE = (958.5, 820)  # centre of truck in top-down view
+TRUCK_CENTRE = (955, 820)  # centre of truck in top-down view
 # getPerspectiveTransform would also work here
 HOMOGRAPHY, status = cv2.findHomography(PTS_SRC, PTS_DST)
